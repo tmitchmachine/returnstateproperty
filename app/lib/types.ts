@@ -1,9 +1,11 @@
 // Core domain types for the property-opportunity scanner.
 //
-// A `Listing` is the normalized shape we expect from any source (Zillow,
-// Redfin, an MLS feed, a scraper, or — for now — local mock data). Keeping
-// every source mapped to this one shape means the scoring engine never has to
-// care where a property came from.
+// Design principle: the app forms its OWN opinion of a property's value, rent,
+// and risk. So a `Listing` carries only facts you can actually observe from a
+// listing page (price, size, condition, location) — never a handed-to-us
+// "estimated value". Value and rent are computed by the valuation engine from
+// `MarketStats`, which is the kind of market-level data you can get for free
+// (e.g. Redfin Data Center publishes median $/sqft and YoY by metro/ZIP).
 
 export type ListingSource = "zillow" | "redfin" | "realtor" | "mls" | "mock";
 
@@ -11,8 +13,14 @@ export type PropertyType =
   | "single-family"
   | "condo"
   | "townhouse"
-  | "multi-family"
-  | "land";
+  | "multi-family";
+
+/**
+ * Observable condition of the home — drives value, rent, and rehab estimates.
+ * In a real pipeline this is inferred from listing remarks/photos; here it's
+ * authored.
+ */
+export type Condition = "turnkey" | "average" | "dated" | "fixer";
 
 /** A signal that a seller may be motivated / the deal may be distressed. */
 export type DistressFlag =
@@ -20,63 +28,73 @@ export type DistressFlag =
   | "short-sale"
   | "auction"
   | "estate-sale"
-  | "fixer-upper"
   | "price-reduced";
 
 export interface PriceChange {
-  /** ISO date of the change. */
-  date: string;
-  /** Price after the change, in dollars. */
-  price: number;
+  date: string; // ISO date
+  price: number; // dollars after the change
+}
+
+/**
+ * Market-level statistics for a metro/ZIP. These are obtainable for free at the
+ * market level (unlike per-home AVMs, which cost money) and are the raw
+ * material our valuation engine turns into a per-property value opinion.
+ */
+export interface MarketStats {
+  id: string;
+  metro: string;
+  state: string;
+
+  /** Median sold price per square foot, in dollars. */
+  medianPpsf: number;
+  /** Trailing 12-month change in $/sqft, as a ratio (0.05 = +5%). */
+  ppsfYoY: number;
+  /** Spread of $/sqft across comps (coefficient of variation, e.g. 0.12). Higher = less certain valuations. */
+  ppsfDispersion: number;
+  /** Number of comparable sales behind these stats — feeds valuation confidence. */
+  compSampleSize: number;
+
+  /** Typical achievable monthly rent per square foot, in dollars. */
+  rentPpsfMonthly: number;
+  /** Median days-on-market locally — context for a listing's own DOM. */
+  medianDaysOnMarket: number;
+
+  /** Annual property tax as a fraction of value. */
+  propertyTaxRate: number;
+  /** Annual insurance as a fraction of value (coastal/FL markets run high). */
+  insuranceRate: number;
 }
 
 export interface Listing {
   id: string;
   source: ListingSource;
-  /** Link back to the original listing, when available. */
   url?: string;
 
   // Location
   address: string;
-  city: string;
-  state: string;
+  metroId: string; // -> MarketStats.id
   zip: string;
 
-  // Physical
+  // Physical (observable facts)
   propertyType: PropertyType;
+  condition: Condition;
   beds: number;
   baths: number;
   sqft: number;
   yearBuilt: number;
   lotSqft?: number;
 
-  // Pricing
-  /** Current list price, in dollars. */
+  // Pricing / timing (observable facts)
   listPrice: number;
-  /**
-   * Independent estimate of fair market value (Zestimate / Redfin Estimate /
-   * comp-based AVM), in dollars. The gap between this and `listPrice` is the
-   * core "below market" signal.
-   */
-  estimatedValue: number;
   priceHistory: PriceChange[];
   daysOnMarket: number;
-
-  // Rental / income
-  /** Estimated achievable monthly market rent, in dollars. */
-  estimatedRent: number;
-  /** Monthly HOA dues, in dollars. */
   hoaMonthly: number;
-  /** Annual property tax, in dollars. */
-  propertyTaxAnnual: number;
-  /** Annual homeowner's insurance, in dollars. */
-  insuranceAnnual: number;
 
-  // Market context
-  /** Trailing 12-month home-price appreciation for the ZIP/metro, as a ratio (0.05 = +5%). */
-  marketAppreciationYoY: number;
-  /** Median days-on-market for the local market — context for this listing's DOM. */
-  marketMedianDaysOnMarket: number;
+  /**
+   * Optional third-party AVM (Zestimate / Redfin Estimate) shown for contrast
+   * against our independent number — never used as an input to scoring.
+   */
+  thirdPartyEstimate?: number;
 
   distressFlags: DistressFlag[];
 

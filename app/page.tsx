@@ -1,10 +1,11 @@
 import { getListings } from "./lib/data";
+import { MARKETS } from "./lib/markets";
 import { scanListings } from "./lib/scoring";
 import { Dashboard } from "./components/Dashboard";
 
 export default async function Home() {
   const listings = await getListings();
-  const scored = scanListings(listings);
+  const scored = scanListings(listings, MARKETS);
 
   const deals = scored.filter((s) => s.overallScore >= 68).length;
   const avg = Math.round(scored.reduce((a, s) => a + s.overallScore, 0) / scored.length);
@@ -17,11 +18,12 @@ export default async function Home() {
           ReturnState Property — opportunity scanner
         </div>
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Scanned {scored.length} listings
+          Scanned {scored.length} listings across {Object.keys(MARKETS).length} markets
         </h1>
         <p className="mt-1 text-zinc-500">
-          Each property is scored 0–100 across below-market price, cash flow, seller
-          motivation, and appreciation. {deals} graded B or better · average score {avg}.
+          Each home is independently valued, then scored 0–100 on below-market price, cash
+          flow, seller motivation, and appreciation. {deals} graded B or better · average
+          score {avg}.
         </p>
       </header>
 

@@ -4,11 +4,12 @@ import { useMemo, useState } from "react";
 import type { ScoredListing } from "../lib/scoring";
 import { PropertyCard } from "./PropertyCard";
 
-type SortKey = "score" | "priceAsc" | "priceDesc" | "cap" | "cashflow" | "discount";
+type SortKey = "score" | "priceAsc" | "priceDesc" | "cap" | "cashflow" | "discount" | "return";
 
 const SORTS: { key: SortKey; label: string }[] = [
   { key: "score", label: "Deal score" },
   { key: "discount", label: "Below market" },
+  { key: "return", label: "5yr return" },
   { key: "cap", label: "Cap rate" },
   { key: "cashflow", label: "Cash flow" },
   { key: "priceAsc", label: "Price ↑" },
@@ -19,10 +20,16 @@ export function Dashboard({ scored }: { scored: ScoredListing[] }) {
   const [sort, setSort] = useState<SortKey>("score");
   const [minScore, setMinScore] = useState(0);
   const [type, setType] = useState<string>("all");
+  const [metro, setMetro] = useState<string>("all");
   const [positiveCashFlow, setPositiveCashFlow] = useState(false);
+  const [hideHighRisk, setHideHighRisk] = useState(false);
 
   const types = useMemo(
     () => Array.from(new Set(scored.map((s) => s.listing.propertyType))).sort(),
+    [scored],
+  );
+  const metros = useMemo(
+    () => Array.from(new Set(scored.map((s) => s.market.metro))).sort(),
     [scored],
   );
 
@@ -30,16 +37,16 @@ export function Dashboard({ scored }: { scored: ScoredListing[] }) {
     const filtered = scored.filter((s) => {
       if (s.overallScore < minScore) return false;
       if (type !== "all" && s.listing.propertyType !== type) return false;
+      if (metro !== "all" && s.market.metro !== metro) return false;
       if (positiveCashFlow && s.financials.monthlyCashFlow < 0) return false;
+      if (hideHighRisk && s.risks.some((r) => r.level === "high")) return false;
       return true;
     });
 
-    const discount = (s: ScoredListing) =>
-      (s.listing.estimatedValue - s.listing.listPrice) / s.listing.estimatedValue;
-
     const sorters: Record<SortKey, (a: ScoredListing, b: ScoredListing) => number> = {
       score: (a, b) => b.overallScore - a.overallScore,
-      discount: (a, b) => discount(b) - discount(a),
+      discount: (a, b) => b.deal.discountToValue - a.deal.discountToValue,
+      return: (a, b) => b.deal.projectedAnnualizedReturn - a.deal.projectedAnnualizedReturn,
       cap: (a, b) => b.financials.capRate - a.financials.capRate,
       cashflow: (a, b) => b.financials.monthlyCashFlow - a.financials.monthlyCashFlow,
       priceAsc: (a, b) => a.listing.listPrice - b.listing.listPrice,
@@ -47,7 +54,7 @@ export function Dashboard({ scored }: { scored: ScoredListing[] }) {
     };
 
     return [...filtered].sort(sorters[sort]);
-  }, [scored, sort, minScore, type, positiveCashFlow]);
+  }, [scored, sort, minScore, type, metro, positiveCashFlow, hideHighRisk]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -80,6 +87,20 @@ export function Dashboard({ scored }: { scored: ScoredListing[] }) {
         </label>
 
         <label className="flex items-center gap-2">
+          <span className="text-zinc-500">Market</span>
+          <select
+            value={metro}
+            onChange={(e) => setMetro(e.target.value)}
+            className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
+          >
+            <option value="all">All</option>
+            {metros.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2">
           <span className="text-zinc-500">Min score {minScore}</span>
           <input
             type="range"
@@ -97,7 +118,16 @@ export function Dashboard({ scored }: { scored: ScoredListing[] }) {
             checked={positiveCashFlow}
             onChange={(e) => setPositiveCashFlow(e.target.checked)}
           />
-          <span className="text-zinc-500">Positive cash flow only</span>
+          <span className="text-zinc-500">Positive cash flow</span>
+        </label>
+
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={hideHighRisk}
+            onChange={(e) => setHideHighRisk(e.target.checked)}
+          />
+          <span className="text-zinc-500">Hide high-risk</span>
         </label>
 
         <span className="ml-auto text-zinc-400">{visible.length} of {scored.length} properties</span>

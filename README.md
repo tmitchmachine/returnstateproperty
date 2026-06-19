@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ReturnState Property — opportunity scanner
 
-## Getting Started
-
-First, run the development server:
+Scans real-estate listings, forms an **independent opinion of value, rent, and
+risk**, and ranks them by buy-side opportunity. Built on Next.js 16.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev   # http://localhost:3000
+npm run build # production build (prerenders every property page)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## How it works
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The pipeline is intentionally source-agnostic — every source maps to one
+`Listing` shape, and the analysis is computed, never handed in.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+Listing (observable facts) ──┐
+                             ├─► valuation.ts ─► value, rent, rehab, ARV (+confidence)
+MarketStats ($/sqft, YoY) ───┘
+                                      │
+                                      ▼
+                              scoring.ts
+                              ├─ 4 weighted criteria → deal score + grade
+                              ├─ deal analysis → max offer, 5yr return, flip math
+                              └─ risk flags
+                                      │
+                                      ▼
+                                  UI (cards, detail)
+```
 
-## Learn More
+| File | Responsibility |
+| --- | --- |
+| `app/lib/types.ts` | Domain types. `Listing` holds only observable facts. |
+| `app/lib/markets.ts` | Per-metro stats (median $/sqft, YoY, rent $/sqft, tax/insurance). |
+| `app/lib/valuation.ts` | The AVM — value/rent/rehab/ARV with a confidence range. |
+| `app/lib/scoring.ts` | Criteria scoring, deal analysis, risk flags. |
+| `app/lib/data.ts` | Mock listings + `getListings()` seam. |
 
-To learn more about Next.js, take a look at the following resources:
+### Scoring criteria (weights)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Below market (30%)** — list price vs. our independent value, shrunk toward
+  neutral when comp confidence is low (so a thin-comp guess can't fake a deal).
+- **Cash flow (30%)** — cap rate + monthly cash flow on a real mortgage/NOI model.
+- **Seller motivation (20%)** — days-on-market vs. local median, price cuts, distress.
+- **Appreciation (20%)** — market YoY trend, adjusted for property age.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Going live: replacing mock data
 
-## Deploy on Vercel
+Everything runs on mock data today. To scan real listings, replace the body of
+`getListings()` in `app/lib/data.ts` to return `Listing[]` from a real source —
+nothing else changes. The valuation engine only needs market-level `$/sqft`,
+which is available **free**:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Need | Free / cheap source |
+| --- | --- |
+| Market $/sqft, YoY, days-on-market (feeds `markets.ts`) | [Redfin Data Center](https://www.redfin.com/news/data-center/) — free bulk downloads by metro/ZIP |
+| Per-listing facts (price, beds, sqft, condition) | A managed scraper ([Apify](https://apify.com), BrightData) ~$20–50/mo, or a licensed feed |
+| Rent estimates / per-home AVM (optional, to validate ours) | [RentCast](https://www.rentcast.io/api) free tier (~50 req/mo) |
+| Demographics / trend context | US Census & [FRED](https://fred.stlouisfed.org) APIs — free |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Put API keys in `.env.local` (e.g. `RENTCAST_API_KEY=…`) and read them inside
+the adapter — they stay server-side since `getListings()` runs in a Server
+Component.
+
+> Note: Zillow/Redfin have no open public API and their ToS prohibits direct
+> scraping. Use their *published* market data (free) plus a licensed listing
+> feed or a managed scraper for the listing-level records.
+
+## Disclaimer
+
+Scores are estimates from a heuristic model — not investment advice.
