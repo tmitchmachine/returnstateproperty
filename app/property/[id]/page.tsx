@@ -5,6 +5,7 @@ import { MARKETS } from "../../lib/markets";
 import { scoreListing, type RiskLevel } from "../../lib/scoring";
 import { ScoreDial } from "../../components/ScoreDial";
 import { usd, pct, signedUsd, scoreColor } from "../../lib/format";
+import { listingLink } from "../../lib/links";
 
 export async function generateStaticParams() {
   return MOCK_LISTINGS.map((l) => ({ id: l.id }));
@@ -21,6 +22,7 @@ export default async function PropertyPage({ params }: PageProps<"/property/[id]
     scoreListing(listing, market);
 
   const valVsList = (val.value - listing.listPrice) / val.value;
+  const source = listingLink(listing, market);
 
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
@@ -28,7 +30,17 @@ export default async function PropertyPage({ params }: PageProps<"/property/[id]
 
       {/* Hero */}
       <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="relative h-40" style={{ backgroundColor: listing.imageColor }}>
+        <div className="relative h-56" style={{ backgroundColor: listing.imageColor }}>
+          {listing.photos?.[0] && (
+            // Photos come from the source feed's CDN — a plain <img> avoids
+            // whitelisting arbitrary hosts in next.config images.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={listing.photos[0]}
+              alt={`${listing.address}, ${market.metro}, ${market.state}`}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
           <div className="absolute bottom-3 left-4 text-white">
             <div className="text-2xl font-bold">{usd(listing.listPrice)}</div>
@@ -36,7 +48,30 @@ export default async function PropertyPage({ params }: PageProps<"/property/[id]
               {listing.address}, {market.metro}, {market.state} {listing.zip}
             </div>
           </div>
+          <a
+            href={source.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute bottom-3 right-4 rounded-lg bg-white/95 px-3 py-1.5 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-white"
+          >
+            {source.isDirect ? `${source.short} listing` : "Look up address"} ↗
+          </a>
         </div>
+
+        {listing.photos && listing.photos.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto border-b border-zinc-100 p-3 dark:border-zinc-800">
+            {listing.photos.slice(1, 7).map((p, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={p}
+                src={p}
+                alt={`${listing.address} photo ${i + 2}`}
+                loading="lazy"
+                className="h-20 w-28 shrink-0 rounded-lg object-cover"
+              />
+            ))}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-6 p-5">
           <ScoreDial score={overallScore} grade={grade} size={88} />
@@ -190,6 +225,13 @@ export default async function PropertyPage({ params }: PageProps<"/property/[id]
 
       <footer className="mt-8 text-xs text-zinc-400">
         Estimates from a heuristic model on mock data — not investment advice.
+        {!source.isDirect && (
+          <>
+            {" "}
+            This listing is demo data with no source page, so the link above searches
+            the address on Zillow rather than opening a listing.
+          </>
+        )}
       </footer>
     </main>
   );

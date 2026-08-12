@@ -165,10 +165,17 @@ function analyzeDeal(listing: Listing, market: MarketStats, val: Valuation, fin:
   const projectedProfit = Math.round(
     buySideEquityNow + equityFromAppreciation + principalPaid + cumulativeCashFlow,
   );
+  // Annualizing needs a non-negative growth factor: when the projected loss
+  // exceeds the cash invested, `1 + totalReturn` goes negative and raising it to
+  // a fractional power yields NaN. Losing more than the whole stake floors at
+  // -100%/yr — you cannot lose more than all of it, annualized.
+  const totalReturn = fin.cashInvested > 0 ? projectedProfit / fin.cashInvested : 0;
   const projectedAnnualizedReturn =
-    fin.cashInvested > 0
-      ? Math.pow(1 + projectedProfit / fin.cashInvested, 1 / A.holdYears) - 1
-      : 0;
+    fin.cashInvested <= 0
+      ? 0
+      : totalReturn <= -1
+        ? -1
+        : Math.pow(1 + totalReturn, 1 / A.holdYears) - 1;
 
   return {
     discountToValue,

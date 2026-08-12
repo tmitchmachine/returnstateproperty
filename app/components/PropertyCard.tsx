@@ -2,18 +2,36 @@ import Link from "next/link";
 import type { ScoredListing } from "../lib/scoring";
 import { ScoreDial } from "./ScoreDial";
 import { usd, pct, signedUsd, scoreColor } from "../lib/format";
+import { listingLink } from "../lib/links";
 
 export function PropertyCard({ scored }: { scored: ScoredListing }) {
   const { listing, market, valuation, financials, deal, risks, overallScore, grade, criteria } = scored;
   const cf = Math.round(financials.monthlyCashFlow);
   const highRisks = risks.filter((r) => r.level === "high").length;
+  const source = listingLink(listing, market);
 
+  // The whole card navigates to the detail page via a stretched overlay link,
+  // which leaves the source link free to be a real <a> (anchors can't nest).
   return (
-    <Link
-      href={`/property/${listing.id}`}
-      className="group flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
-    >
+    <article className="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
+      <Link
+        href={`/property/${listing.id}`}
+        className="absolute inset-0 z-10"
+        aria-label={`${listing.address} — full analysis`}
+      />
+
       <div className="relative h-32" style={{ backgroundColor: listing.imageColor }}>
+        {listing.photos?.[0] && (
+          // Listing photos are hosted on whatever CDN the feed uses, so a plain
+          // <img> avoids having to whitelist every host in next.config images.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={listing.photos[0]}
+            alt={`${listing.address}, ${market.metro}`}
+            loading="lazy"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {deal.discountToValue > 0.05 && (
@@ -27,6 +45,15 @@ export function PropertyCard({ scored }: { scored: ScoredListing }) {
             </span>
           ))}
         </div>
+        <a
+          href={source.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={source.label}
+          className="absolute right-3 top-3 z-20 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold text-zinc-900 shadow-sm transition hover:bg-white"
+        >
+          {source.short} ↗
+        </a>
         <span className="absolute bottom-2 right-3 text-xs font-medium text-white/90">
           {market.metro}, {market.state}
         </span>
@@ -66,7 +93,7 @@ export function PropertyCard({ scored }: { scored: ScoredListing }) {
           )}
         </div>
       </div>
-    </Link>
+    </article>
   );
 }
 

@@ -98,6 +98,13 @@ export interface Listing {
 
   distressFlags: DistressFlag[];
 
-  imageColor: string; // placeholder visual until real photos are wired in
+  /**
+   * Photo URLs from the source listing, hero first. Demo listings have none —
+   * there is no real home behind them to photograph — so the UI falls back to
+   * `imageColor`. A real adapter populates this from the feed.
+   */
+  photos?: string[];
+
+  imageColor: string; // placeholder visual used when `photos` is empty
   listedDate: string;
 }
