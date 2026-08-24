@@ -118,8 +118,15 @@ async function streamLatestMetroRows(): Promise<Record<string, RedfinMetroRow>> 
   for (const [region, row] of Object.entries(best)) {
     const id = regionToId[region];
     if (!id) continue;
-    const { _begin: _, ...rest } = row;
-    out[id] = rest;
+    out[id] = {
+      region: row.region,
+      medianPpsf: row.medianPpsf,
+      ppsfYoY: row.ppsfYoY,
+      medianDaysOnMarket: row.medianDaysOnMarket,
+      homesSold: row.homesSold,
+      medianSalePrice: row.medianSalePrice,
+      periodBegin: row.periodBegin,
+    };
   }
 
   if (Object.keys(out).length === 0) {
