@@ -1,76 +1,119 @@
 // Market-level statistics by metro.
 //
-// These are the kind of figures published free at the market level (e.g. Redfin
-// Data Center: median $/sqft, YoY change, days-on-market) plus typical
-// tax/insurance rates. The valuation engine turns them into per-property value
-// and rent opinions. Numbers here are representative, hand-set for the demo.
+// Sale $/sqft, YoY, and days-on-market come from Redfin's free Data Center
+// metro tracker. Tax/insurance baselines live in metros.ts. Rent $/sqft uses
+// the metro baseline, optionally enriched from RentCast ZIP market stats when
+// RENTCAST_API_KEY is set and RENTCAST_ENRICH_RENT=1.
 
 import type { MarketStats } from "./types";
+import { METRO_CONFIGS } from "./metros";
+import snapshot from "./data/redfin-metro-snapshot.json";
+import { fetchRedfinMetroStats } from "./sources/redfin-markets";
+import {
+  fetchRentCastRentPpsf,
+  hasRentCastKey,
+} from "./sources/rentcast";
 
-export const MARKETS: Record<string, MarketStats> = {
-  "cleveland-oh": {
-    id: "cleveland-oh",
-    metro: "Cleveland",
-    state: "OH",
-    medianPpsf: 118,
-    ppsfYoY: 0.062,
-    ppsfDispersion: 0.16,
-    compSampleSize: 42,
-    rentPpsfMonthly: 1.18,
-    medianDaysOnMarket: 28,
-    propertyTaxRate: 0.019,
-    insuranceRate: 0.006,
+/** Dispersion shrinks as the sold-comp sample grows. */
+function dispersionFromSample(homesSold: number): number {
+  if (homesSold <= 0) return 0.2;
+  return Math.min(0.25, Math.max(0.08, 0.08 + 40 / homesSold));
+}
+
+function buildMarket(
+  metroId: string,
+  sale: {
+    medianPpsf: number;
+    ppsfYoY: number;
+    medianDaysOnMarket: number;
+    homesSold: number;
   },
-  "indianapolis-in": {
-    id: "indianapolis-in",
-    metro: "Indianapolis",
-    state: "IN",
-    medianPpsf: 138,
-    ppsfYoY: 0.071,
-    ppsfDispersion: 0.12,
-    compSampleSize: 65,
-    rentPpsfMonthly: 1.05,
-    medianDaysOnMarket: 25,
-    propertyTaxRate: 0.011,
-    insuranceRate: 0.006,
-  },
-  "memphis-tn": {
-    id: "memphis-tn",
-    metro: "Memphis",
-    state: "TN",
-    medianPpsf: 109,
-    ppsfYoY: 0.041,
-    ppsfDispersion: 0.21,
-    compSampleSize: 18,
-    rentPpsfMonthly: 1.04,
-    medianDaysOnMarket: 31,
-    propertyTaxRate: 0.012,
-    insuranceRate: 0.008,
-  },
-  "tampa-fl": {
-    id: "tampa-fl",
-    metro: "Tampa",
-    state: "FL",
-    medianPpsf: 286,
-    ppsfYoY: 0.018,
-    ppsfDispersion: 0.14,
-    compSampleSize: 58,
-    rentPpsfMonthly: 1.55,
-    medianDaysOnMarket: 33,
-    propertyTaxRate: 0.011,
-    insuranceRate: 0.019,
-  },
-  "austin-tx": {
-    id: "austin-tx",
-    metro: "Austin",
-    state: "TX",
-    medianPpsf: 312,
-    ppsfYoY: -0.014,
-    ppsfDispersion: 0.13,
-    compSampleSize: 71,
-    rentPpsfMonthly: 1.62,
-    medianDaysOnMarket: 44,
-    propertyTaxRate: 0.018,
-    insuranceRate: 0.007,
-  },
-};
+  rentPpsfMonthly: number,
+): MarketStats {
+  const cfg = METRO_CONFIGS.find((m) => m.id === metroId)!;
+  return {
+    id: cfg.id,
+    metro: cfg.metro,
+    state: cfg.state,
+    medianPpsf: Math.round(sale.medianPpsf * 10) / 10,
+    ppsfYoY: sale.ppsfYoY,
+    ppsfDispersion: dispersionFromSample(sale.homesSold),
+    compSampleSize: Math.max(1, Math.round(sale.homesSold)),
+    rentPpsfMonthly,
+    medianDaysOnMarket: sale.medianDaysOnMarket,
+    propertyTaxRate: cfg.propertyTaxRate,
+    insuranceRate: cfg.insuranceRate,
+  };
+}
+
+export interface MarketsResult {
+  markets: Record<string, MarketStats>;
+  /** True when sale stats came from a live Redfin download this process. */
+  redfinLive: boolean;
+  periodBegin: string;
+  /** True when rent $/sqft was enriched from RentCast for at least one metro. */
+  rentcastRent: boolean;
+}
+
+/**
+ * Resolve market stats for scoring. Always prefers Redfin (live or snapshot)
+ * for sale metrics; optionally overlays RentCast rent $/sqft.
+ */
+export async function getMarkets(): Promise<MarketsResult> {
+  const { rows, live, periodBegin } = await fetchRedfinMetroStats();
+
+  let rentcastRent = false;
+  const markets: Record<string, MarketStats> = {};
+
+  for (const cfg of METRO_CONFIGS) {
+    const sale = rows[cfg.id];
+    let rent = cfg.rentPpsfMonthly;
+
+    if (hasRentCastKey()) {
+      const liveRent = await fetchRentCastRentPpsf(cfg);
+      if (liveRent != null) {
+        rent = liveRent;
+        rentcastRent = true;
+      }
+    }
+
+    if (sale) {
+      markets[cfg.id] = buildMarket(cfg.id, sale, rent);
+    } else {
+      // Should be rare — snapshot covers every configured metro.
+      markets[cfg.id] = MARKETS[cfg.id];
+      if (rent !== markets[cfg.id].rentPpsfMonthly) {
+        markets[cfg.id] = { ...markets[cfg.id], rentPpsfMonthly: rent };
+      }
+    }
+  }
+
+  return { markets, redfinLive: live, periodBegin, rentcastRent };
+}
+
+/**
+ * Synchronous market table from the committed Redfin snapshot + metro
+ * baselines. Prefer `getMarkets()` in Server Components for a live refresh.
+ */
+export const MARKETS: Record<string, MarketStats> = Object.fromEntries(
+  METRO_CONFIGS.map((cfg) => {
+    const row = snapshot.metros[cfg.id as keyof typeof snapshot.metros];
+    const homesSold = row?.homesSold ?? 40;
+    return [
+      cfg.id,
+      {
+        id: cfg.id,
+        metro: cfg.metro,
+        state: cfg.state,
+        medianPpsf: row ? Math.round(row.medianPpsf * 10) / 10 : 150,
+        ppsfYoY: row?.ppsfYoY ?? 0.03,
+        ppsfDispersion: dispersionFromSample(homesSold),
+        compSampleSize: Math.max(1, homesSold),
+        rentPpsfMonthly: cfg.rentPpsfMonthly,
+        medianDaysOnMarket: row?.medianDaysOnMarket ?? 30,
+        propertyTaxRate: cfg.propertyTaxRate,
+        insuranceRate: cfg.insuranceRate,
+      } satisfies MarketStats,
+    ];
+  }),
+);

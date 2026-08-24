@@ -7,7 +7,13 @@
 // `MarketStats`, which is the kind of market-level data you can get for free
 // (e.g. Redfin Data Center publishes median $/sqft and YoY by metro/ZIP).
 
-export type ListingSource = "zillow" | "redfin" | "realtor" | "mls" | "mock";
+export type ListingSource =
+  | "zillow"
+  | "redfin"
+  | "realtor"
+  | "mls"
+  | "rentcast"
+  | "mock";
 
 export type PropertyType =
   | "single-family"

@@ -1,12 +1,18 @@
-// Mock listing dataset, clustered by metro so the valuation engine has real
-// comps to work from. Listings carry only observable facts — value, rent, and
-// risk are computed, never handed in. Span of conditions/prices is deliberate
-// so the scan produces a meaningful ranking.
+// Listing catalog seam.
 //
-// To go live, replace the body of `getListings()` with a real adapter that
-// returns `Listing[]`. See README for free data sources.
+// With RENTCAST_API_KEY set, getListings() pulls live active sale listings from
+// RentCast (MLS/aggregator feed). Without a key, the curated MOCK_LISTINGS
+// catalog is used so the UI still works offline / in demos.
+//
+// Market $/sqft comes from Redfin Data Center via getMarkets() — independent of
+// this file.
 
+import { unstable_cache } from "next/cache";
 import type { Listing } from "./types";
+import {
+  fetchRentCastListings,
+  hasRentCastKey,
+} from "./sources/rentcast";
 
 export const MOCK_LISTINGS: Listing[] = [
   // ---- Cleveland, OH (118 $/sqft, +6.2% YoY) -----------------------------
@@ -420,15 +426,45 @@ export const MOCK_LISTINGS: Listing[] = [
   },
 ];
 
+export type ListingsSourceKind = "rentcast" | "mock";
+
+export interface ListingsResult {
+  listings: Listing[];
+  source: ListingsSourceKind;
+}
+
+const getCachedRentCastListings = unstable_cache(
+  async () => fetchRentCastListings(),
+  ["rentcast-sale-listings"],
+  { revalidate: 60 * 60 * 6, tags: ["rentcast-listings"] },
+);
+
 /**
- * The single entry point the UI uses to fetch listings. Swap the body for a
- * real data adapter (licensed API, MLS feed, or scraper) and the rest of the
- * app keeps working unchanged.
+ * The single entry point the UI uses to fetch listings.
+ * Prefers RentCast when RENTCAST_API_KEY is present; otherwise mock data.
  */
 export async function getListings(): Promise<Listing[]> {
-  return MOCK_LISTINGS;
+  const { listings } = await getListingsWithMeta();
+  return listings;
+}
+
+export async function getListingsWithMeta(): Promise<ListingsResult> {
+  if (!hasRentCastKey()) {
+    return { listings: MOCK_LISTINGS, source: "mock" };
+  }
+  try {
+    const listings = await getCachedRentCastListings();
+    return { listings, source: "rentcast" };
+  } catch (err) {
+    console.warn(
+      "[data] RentCast listings failed, falling back to mock:",
+      err instanceof Error ? err.message : err,
+    );
+    return { listings: MOCK_LISTINGS, source: "mock" };
+  }
 }
 
 export async function getListing(id: string): Promise<Listing | undefined> {
-  return MOCK_LISTINGS.find((l) => l.id === id);
+  const listings = await getListings();
+  return listings.find((l) => l.id === id);
 }

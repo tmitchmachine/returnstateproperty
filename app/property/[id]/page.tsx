@@ -1,21 +1,25 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getListing, MOCK_LISTINGS } from "../../lib/data";
-import { MARKETS } from "../../lib/markets";
+import { getListing, getListings } from "../../lib/data";
+import { getMarkets } from "../../lib/markets";
 import { scoreListing, type RiskLevel } from "../../lib/scoring";
 import { ScoreDial } from "../../components/ScoreDial";
 import { usd, pct, signedUsd, scoreColor } from "../../lib/format";
 import { listingLink } from "../../lib/links";
 
+export const revalidate = 21600;
+
 export async function generateStaticParams() {
-  return MOCK_LISTINGS.map((l) => ({ id: l.id }));
+  const listings = await getListings();
+  return listings.map((l) => ({ id: l.id }));
 }
 
 export default async function PropertyPage({ params }: PageProps<"/property/[id]">) {
   const { id } = await params;
   const listing = await getListing(id);
   if (!listing) notFound();
-  const market = MARKETS[listing.metroId];
+  const { markets } = await getMarkets();
+  const market = markets[listing.metroId];
   if (!market) notFound();
 
   const { valuation: val, financials: fin, criteria, deal, risks, overallScore, grade } =
@@ -224,12 +228,12 @@ export default async function PropertyPage({ params }: PageProps<"/property/[id]
       )}
 
       <footer className="mt-8 text-xs text-zinc-400">
-        Estimates from a heuristic model on mock data — not investment advice.
+        Estimates from a heuristic model — not investment advice.
         {!source.isDirect && (
           <>
             {" "}
-            This listing is demo data with no source page, so the link above searches
-            the address on Zillow rather than opening a listing.
+            No direct listing URL was provided by the feed, so the link above searches
+            the address rather than opening a canonical listing page.
           </>
         )}
       </footer>

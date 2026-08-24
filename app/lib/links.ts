@@ -13,6 +13,7 @@ const SOURCE_LABEL: Record<ListingSource, string> = {
   redfin: "Redfin",
   realtor: "Realtor.com",
   mls: "MLS",
+  rentcast: "RentCast",
   mock: "Zillow",
 };
 
