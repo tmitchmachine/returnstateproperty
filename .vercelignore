@@ -1,0 +1,8 @@
+# Secrets belong in Vercel's encrypted env vars, never in the uploaded source.
+# Without this, `vercel deploy` ships the local .env into the build.
+.env
+.env.*
+!.env.example
+
+.next
+node_modules
