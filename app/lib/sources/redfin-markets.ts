@@ -215,6 +215,11 @@ function warm(): Promise<void> {
 
 function scheduleRefresh(): void {
   if (process.env.NEXT_PHASE === PHASE_PRODUCTION_BUILD) return;
+  // On Vercel each invocation is a short-lived instance, so warmed rows are
+  // never read back, and a 106MB download inside `after` can outlive the
+  // function's duration limit. The committed snapshot is the source of truth
+  // there — keep it current with `npm run refresh:markets`.
+  if (process.env.VERCEL) return;
   if (refreshing) return;
   if (cached && Date.now() - cached.at < REFRESH_MS) return;
 

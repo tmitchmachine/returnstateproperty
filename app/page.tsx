@@ -3,8 +3,9 @@ import { getMarkets } from "./lib/markets";
 import { scanListings } from "./lib/scoring";
 import { Dashboard } from "./components/Dashboard";
 
-/** Refresh listing + market pulls on a 6-hour cadence. */
-export const revalidate = 21600;
+/** Weekly refresh: one regeneration spends 5 RentCast calls (one per
+ * metro), and the free tier is ~50/month. See README > Live data sources. */
+export const revalidate = 604800;
 
 export default async function Home() {
   const [{ listings, source }, { markets, redfinLive, periodBegin, rentcastRent }] =

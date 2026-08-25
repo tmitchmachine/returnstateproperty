@@ -7,7 +7,7 @@ import { ScoreDial } from "../../components/ScoreDial";
 import { usd, pct, signedUsd, scoreColor } from "../../lib/format";
 import { listingLink } from "../../lib/links";
 
-export const revalidate = 21600;
+export const revalidate = 604800;
 
 export async function generateStaticParams() {
   const listings = await getListings();

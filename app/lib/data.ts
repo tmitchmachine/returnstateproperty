@@ -437,7 +437,9 @@ export interface ListingsResult {
 const getCachedRentCastListings = unstable_cache(
   async () => fetchRentCastListings(),
   ["rentcast-sale-listings"],
-  { revalidate: 60 * 60 * 6, tags: ["rentcast-listings"] },
+  // Matches the route revalidate window; a shorter one here would refetch
+  // on every regeneration and multiply quota spend.
+  { revalidate: 60 * 60 * 24 * 7, tags: ["rentcast-listings"] },
 );
 
 /**
