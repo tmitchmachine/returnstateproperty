@@ -3,7 +3,7 @@
 // Sale $/sqft, YoY, and days-on-market come from Redfin's free Data Center
 // metro tracker. Tax/insurance baselines live in metros.ts. Rent $/sqft uses
 // the metro baseline, optionally enriched from RentCast ZIP market stats when
-// RENTCAST_API_KEY is set and RENTCAST_ENRICH_RENT=1.
+// RENTCAST_LIVE=1 (plus a key) and RENTCAST_ENRICH_RENT=1.
 
 import type { MarketStats } from "./types";
 import { METRO_CONFIGS } from "./metros";
@@ -11,7 +11,7 @@ import snapshot from "./data/redfin-metro-snapshot.json";
 import { fetchRedfinMetroStats } from "./sources/redfin-markets";
 import {
   fetchRentCastRentPpsf,
-  hasRentCastKey,
+  rentcastLiveEnabled,
 } from "./sources/rentcast";
 
 /** Dispersion shrinks as the sold-comp sample grows. */
@@ -69,7 +69,7 @@ export async function getMarkets(): Promise<MarketsResult> {
     const sale = rows[cfg.id];
     let rent = cfg.rentPpsfMonthly;
 
-    if (hasRentCastKey()) {
+    if (rentcastLiveEnabled()) {
       const liveRent = await fetchRentCastRentPpsf(cfg);
       if (liveRent != null) {
         rent = liveRent;

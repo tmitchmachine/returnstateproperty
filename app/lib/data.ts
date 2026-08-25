@@ -12,6 +12,7 @@ import type { Listing } from "./types";
 import {
   fetchRentCastListings,
   hasRentCastKey,
+  rentcastLiveEnabled,
 } from "./sources/rentcast";
 
 export const MOCK_LISTINGS: Listing[] = [
@@ -441,7 +442,7 @@ const getCachedRentCastListings = unstable_cache(
 
 /**
  * The single entry point the UI uses to fetch listings.
- * Prefers RentCast when RENTCAST_API_KEY is present; otherwise mock data.
+ * Prefers RentCast when RENTCAST_LIVE=1 and a key is present; else mock data.
  */
 export async function getListings(): Promise<Listing[]> {
   const { listings } = await getListingsWithMeta();
@@ -449,7 +450,12 @@ export async function getListings(): Promise<Listing[]> {
 }
 
 export async function getListingsWithMeta(): Promise<ListingsResult> {
-  if (!hasRentCastKey()) {
+  if (!rentcastLiveEnabled()) {
+    if (hasRentCastKey()) {
+      console.info(
+        "[data] RentCast key present but RENTCAST_LIVE is not 1 — serving mock listings.",
+      );
+    }
     return { listings: MOCK_LISTINGS, source: "mock" };
   }
   try {
