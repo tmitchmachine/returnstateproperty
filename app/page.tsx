@@ -20,7 +20,7 @@ export default async function Home() {
   const listingLabel =
     source === "rentcast"
       ? "live RentCast / MLS listings"
-      : "demo listings (set RENTCAST_API_KEY for live data)";
+      : "demo listings (set RENTCAST_LIVE=1 for live data)";
   const marketLabel = redfinLive
     ? `live Redfin Data Center (${periodBegin})`
     : `Redfin Data Center snapshot (${periodBegin})`;
@@ -53,8 +53,8 @@ export default async function Home() {
         {source === "mock" && (
           <>
             {" "}
-            Listing records are demo data until <code>RENTCAST_API_KEY</code> is set in{" "}
-            <code>.env.local</code>.
+            Listing records are demo data until <code>RENTCAST_API_KEY</code> and{" "}
+            <code>RENTCAST_LIVE=1</code> are set in <code>.env.local</code>.
           </>
         )}
       </footer>

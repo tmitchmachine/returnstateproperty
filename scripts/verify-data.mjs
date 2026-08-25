@@ -147,8 +147,12 @@ function verifyMockCatalog() {
   const src = readFileSync(join(ROOT, "app/lib/data.ts"), "utf8");
   assert(src.includes("MOCK_LISTINGS"), "MOCK_LISTINGS still present");
   assert(src.includes("hasRentCastKey"), "RentCast key gate present");
+  assert(src.includes("rentcastLiveEnabled"), "RentCast opt-in gate present");
   assert(src.includes('source: "mock"'), "mock listings source tagged");
-  assert(!process.env.RENTCAST_API_KEY, "RENTCAST_API_KEY unset → mock path expected in this env");
+  assert(
+    process.env.RENTCAST_LIVE !== "1",
+    "RENTCAST_LIVE is not 1 → mock path expected (a key alone spends no quota)",
+  );
 }
 
 function verifyRentCastAdapterShape() {

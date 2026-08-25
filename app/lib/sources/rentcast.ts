@@ -74,6 +74,18 @@ export function hasRentCastKey(): boolean {
   return Boolean(apiKey());
 }
 
+/**
+ * Live listings are opt-in per environment, not merely key-present.
+ *
+ * The free tier is ~50 requests/month and one scan spends five of them (one
+ * per metro), so a key sitting in `.env` is not consent for every dev server
+ * boot, test run, and `next build` to spend quota. Set RENTCAST_LIVE=1 when
+ * you actually want live listings; otherwise the mock catalog is served.
+ */
+export function rentcastLiveEnabled(): boolean {
+  return hasRentCastKey() && process.env.RENTCAST_LIVE === "1";
+}
+
 async function rentcastGet<T>(
   path: string,
   params: Record<string, string | number>,
@@ -267,6 +279,9 @@ export async function fetchRentCastListings(): Promise<Listing[]> {
   if (!hasRentCastKey()) {
     throw new Error("RENTCAST_API_KEY is not set");
   }
+  if (!rentcastLiveEnabled()) {
+    throw new Error("RENTCAST_LIVE is not set to 1 — refusing to spend quota");
+  }
 
   const batches = await Promise.all(
     METRO_CONFIGS.map(async (metro) => {
@@ -303,7 +318,7 @@ export async function fetchRentCastListingById(
 export async function fetchRentCastRentPpsf(
   metro: MetroConfig,
 ): Promise<number | null> {
-  if (!hasRentCastKey()) return null;
+  if (!rentcastLiveEnabled()) return null;
   if (process.env.RENTCAST_ENRICH_RENT !== "1") return null;
 
   try {

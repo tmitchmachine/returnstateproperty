@@ -4,10 +4,16 @@ Scans real-estate listings, forms an **independent opinion of value, rent, and
 risk**, and ranks them by buy-side opportunity. Built on Next.js 16.
 
 ```bash
-cp .env.example .env.local   # add RENTCAST_API_KEY for live listings
+cp .env.example .env.local   # add RENTCAST_API_KEY + RENTCAST_LIVE=1 for live listings
 npm run dev                  # http://localhost:3000
 npm run build                # production build
+npm run refresh:markets      # pull the latest Redfin metro snapshot (~4s)
+npm run test:data            # verify the live adapters
 ```
+
+Live listings are **opt-in**: a key alone serves the mock catalog. Set
+`RENTCAST_LIVE=1` only when you want to spend quota — the free tier is ~50
+requests/month and one scan costs five (one per metro).
 
 ## How it works
 
@@ -39,6 +45,7 @@ MarketStats ($/sqft, YoY) ───┘
 | `app/lib/valuation.ts` | The AVM — value/rent/rehab/ARV with a confidence range. |
 | `app/lib/scoring.ts` | Criteria scoring, deal analysis, risk flags. |
 | `app/lib/data.ts` | `getListings()` seam (RentCast live, else mock). |
+| `scripts/refresh-markets.mjs` | Rewrites the committed Redfin snapshot. |
 
 ### Scoring criteria (weights)
 
@@ -53,11 +60,17 @@ MarketStats ($/sqft, YoY) ───┘
 | Need | Source | Auth |
 | --- | --- | --- |
 | Market $/sqft, YoY, days-on-market | [Redfin Data Center](https://www.redfin.com/news/data-center/) metro tracker (public S3 TSV) | None — cached weekly; snapshot at `app/lib/data/redfin-metro-snapshot.json` as fallback |
-| Per-listing facts (price, beds, sqft, DOM, MLS type) | [RentCast](https://www.rentcast.io/api) `/listings/sale` | `RENTCAST_API_KEY` in `.env.local` |
+| Per-listing facts (price, beds, sqft, DOM, MLS type) | [RentCast](https://www.rentcast.io/api) `/listings/sale` | `RENTCAST_API_KEY` **and** `RENTCAST_LIVE=1` in `.env.local` |
 | Rent $/sqft (optional enrichment) | RentCast `/markets` by ZIP | Same key; set `RENTCAST_ENRICH_RENT=1` to enable |
 
-Without `RENTCAST_API_KEY`, the app serves the curated mock listing catalog so
+Without `RENTCAST_LIVE=1`, the app serves the curated mock listing catalog so
 local demos still work. Market stats still load from Redfin (live or snapshot).
+
+Redfin's metro tracker is a ~106MB gzip, so it is **never downloaded during a
+render** — a request is served from the committed snapshot (or the in-process
+rows once warm) and the refresh runs via `after()` once the response is flushed.
+Run `npm run refresh:markets` weekly to keep the snapshot, and therefore the
+first page view after a restart, current.
 
 > Note: Zillow/Redfin have no open public *listing* API and their ToS prohibit
 > direct scraping. Use Redfin's *published* market data (free) plus a licensed
